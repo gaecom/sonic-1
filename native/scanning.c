@@ -51,8 +51,14 @@ static inline char isspace(char ch) {
     return ch == ' ' || ch == '\r' || ch == '\n' | ch == '\t';
 }
 
-static inline void vdigits(const GoString *src, long *p, JsonState *ret) {
+const int MASK_USE_NUMBER = 1<<2;
+
+static inline void vdigits(const GoString *src, long *p, JsonState *ret, int flag) {
     --*p;
+    if (flag & MASK_USE_NUMBER) {
+        skip_number(src, p);
+        return;
+    }
     vnumber(src, p, ret);
 }
 
@@ -572,9 +578,12 @@ static inline ssize_t advance_validate_string(const GoString *src, long p, int64
 
 /** Value Scanning Routines **/
 
-long value(const char *s, size_t n, long p, JsonState *ret, int allow_control) {
+const uint64_t MASK_ALLOW_CONTROL = 1ul<<31;
+
+long value(const char *s, size_t n, long p, JsonState *ret, uint64_t flags) {
     long     q = p;
     GoString m = {.buf = s, .len = n};
+    bool allow_control = (flags&MASK_ALLOW_CONTROL) != 0;
 
     /* parse the next identifier, q is UNSAFE, may cause out-of-bounds accessing */
     switch (advance_ns(&m, &q)) {
@@ -588,7 +597,7 @@ long value(const char *s, size_t n, long p, JsonState *ret, int allow_control) {
         case '6' : /* fallthrough */
         case '7' : /* fallthrough */
         case '8' : /* fallthrough */
-        case '9' : vdigits(&m, &q, ret)                                 ; return q;
+        case '9' : vdigits(&m, &q, ret, flags)                          ; return q;
         case '"' : vstring(&m, &q, ret)                                 ; return q;
         case 'n' : ret->vt = advance_dword(&m, &q, 1, V_NULL, VS_NULL)  ; return q;
         case 't' : ret->vt = advance_dword(&m, &q, 1, V_TRUE, VS_TRUE)  ; return q;
